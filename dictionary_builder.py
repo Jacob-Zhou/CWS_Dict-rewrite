@@ -6,18 +6,20 @@ import tensorflow as tf
 import utils
 
 
-def load_dict(dictionary_file):
+def load_dict(dictionary_files):
     """Loads a vocabulary file into a dictionary."""
     dictionary = collections.OrderedDict()
     index = 0
-    with tf.gfile.GFile(dictionary_file, "r") as reader:
-        while True:
-            token = utils.convert_to_unicode(reader.readline())
-            if not token:
-                break
-            token = token.strip()
-            dictionary[token] = index
-            index += 1
+    dictionary_files = dictionary_files.split(",")
+    for dictionary_file in dictionary_files:
+        with tf.gfile.GFile(dictionary_file, "r") as reader:
+            while True:
+                token = utils.convert_to_unicode(reader.readline())
+                if not token:
+                    break
+                token = token.strip()
+                dictionary[token] = index
+                index += 1
     return dictionary
 
 
