@@ -67,6 +67,10 @@ flags.DEFINE_bool(
     "do_predict", False,
     "Whether to run the model in inference mode on the test set.")
 
+flags.DEFINE_bool(
+    "early_stop", True,
+    "Whether to use early stop.")
+
 flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
 
 flags.DEFINE_float("num_train_epochs", 3.0,
@@ -280,17 +284,25 @@ def main(_):
             input_dim=tokenizer.dim,
             dict_dim=dict_builder.dim if dict_builder is not None else 1)
 
-        early_stopping = tf.contrib.estimator.stop_if_no_increase_hook(
-            estimator,
-            metric_name='accuracy',
-            max_steps_without_increase=num_early_steps,
-            min_steps=num_train_steps,
-            run_every_secs=None,
-            run_every_steps=2000)
+        if FLAGS.early_stop:
+            print("using early stop")
+            early_stopping = tf.contrib.estimator.stop_if_no_increase_hook(
+                estimator,
+                metric_name='accuracy',
+                max_steps_without_increase=num_early_steps,
+                min_steps=num_train_steps,
+                run_every_secs=None,
+                run_every_steps=1000)
 
-        tf.estimator.train_and_evaluate(estimator,
-                                        train_spec=tf.estimator.TrainSpec(train_input_fn, hooks=[early_stopping]),
-                                        eval_spec=tf.estimator.EvalSpec(eval_input_fn))
+            tf.estimator.train_and_evaluate(estimator,
+                                            train_spec=tf.estimator.TrainSpec(train_input_fn, hooks=[early_stopping]),
+                                            eval_spec=tf.estimator.EvalSpec(eval_input_fn, throttle_secs=60))
+        else:
+            print("do not use early stop")
+            tf.estimator.train_and_evaluate(estimator,
+                                            train_spec=tf.estimator.TrainSpec(train_input_fn,
+                                                                              max_steps=num_train_steps),
+                                            eval_spec=tf.estimator.EvalSpec(eval_input_fn, throttle_secs=60))
 
     if FLAGS.do_predict:
         test_file = os.path.join(FLAGS.data_dir, "test.tf_record")

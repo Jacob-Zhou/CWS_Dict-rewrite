@@ -202,6 +202,7 @@ def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
                      num_train_steps, num_warmup_steps, init_embedding=None):
     """Returns `model_fn` closure for TPUEstimator."""
 
+    embedding = None
     if init_embedding is not None:
         embedding = utils.get_embedding(init_embedding, tokenizer.vocab, config.embedding_size)
 
