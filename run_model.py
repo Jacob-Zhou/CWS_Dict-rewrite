@@ -267,25 +267,28 @@ def main(_):
             input_dim=tokenizer.dim,
             dict_dim=dict_builder.dim if dict_builder is not None else 1)
 
-        dev_file = os.path.join(FLAGS.data_dir, "dev.tf_record")
-        dev_examples = processor.get_dev_examples(FLAGS.data_dir)
-        process.file_based_convert_examples_to_features(
-            examples=dev_examples, tokenizer=tokenizer, dict_builder=dict_builder,
-            label_map=processor.get_labels(), output_file=dev_file)
-        tf.logging.info("***** Running evaluation *****")
-        tf.logging.info("  Num examples = %d", len(dev_examples))
-        tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
+        eval_input_fn = None
+        if FLAGS.do_eval:
+            dev_file = os.path.join(FLAGS.data_dir, "dev.tf_record")
+            dev_examples = processor.get_dev_examples(FLAGS.data_dir)
+            process.file_based_convert_examples_to_features(
+                examples=dev_examples, tokenizer=tokenizer, dict_builder=dict_builder,
+                label_map=processor.get_labels(), output_file=dev_file)
+            tf.logging.info("***** Running evaluation *****")
+            tf.logging.info("  Num examples = %d", len(dev_examples))
+            tf.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
 
-        eval_input_fn = file_based_input_fn_builder(
-            input_file=dev_file,
-            batch_size=FLAGS.eval_batch_size,
-            is_training=False,
-            drop_remainder=False,
-            input_dim=tokenizer.dim,
-            dict_dim=dict_builder.dim if dict_builder is not None else 1)
+            eval_input_fn = file_based_input_fn_builder(
+                input_file=dev_file,
+                batch_size=FLAGS.eval_batch_size,
+                is_training=False,
+                drop_remainder=False,
+                input_dim=tokenizer.dim,
+                dict_dim=dict_builder.dim if dict_builder is not None else 1)
 
         if FLAGS.early_stop:
             print("using early stop")
+            assert eval_input_fn is not None, "early_stop request do_eval"
             early_stopping = tf.contrib.estimator.stop_if_no_increase_hook(
                 estimator,
                 metric_name='accuracy',
@@ -298,11 +301,14 @@ def main(_):
                                             train_spec=tf.estimator.TrainSpec(train_input_fn, hooks=[early_stopping]),
                                             eval_spec=tf.estimator.EvalSpec(eval_input_fn, throttle_secs=60))
         else:
-            print("do not use early stop")
-            tf.estimator.train_and_evaluate(estimator,
-                                            train_spec=tf.estimator.TrainSpec(train_input_fn,
-                                                                              max_steps=num_train_steps),
-                                            eval_spec=tf.estimator.EvalSpec(eval_input_fn, throttle_secs=60))
+            if FLAGS.do_eval:
+                print("do not use early stop")
+                tf.estimator.train_and_evaluate(estimator,
+                                                train_spec=tf.estimator.TrainSpec(train_input_fn,
+                                                                                  max_steps=num_train_steps),
+                                                eval_spec=tf.estimator.EvalSpec(eval_input_fn, throttle_secs=60))
+            else:
+                estimator.train(train_input_fn, max_steps=num_train_steps)
 
     if FLAGS.do_predict:
         test_file = os.path.join(FLAGS.data_dir, "test.tf_record")
