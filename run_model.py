@@ -3,6 +3,8 @@ import utils
 import os
 from models import BaselineModel
 from models import DictConcatModel
+from models import AttendedDictModel
+from models import AttendedInputModel
 import tokenization
 import dictionary_builder
 import tensorflow as tf
@@ -186,7 +188,6 @@ def main(_):
         raise ValueError(
             "At least one of `train`, `eval` or `predict' must be select.")
 
-    config = BaselineModel.BaselineConfig.from_json_file(FLAGS.config_file)
 
     tf.gfile.MakeDirs(FLAGS.output_dir)
 
@@ -226,6 +227,7 @@ def main(_):
 
     model_fn = None
     if FLAGS.model == "baseline":
+        config = BaselineModel.BaselineConfig.from_json_file(FLAGS.config_file)
         model_fn = BaselineModel.model_fn_builder(
             config=config,
             init_checkpoint=FLAGS.init_checkpoint,
@@ -235,7 +237,28 @@ def main(_):
             num_warmup_steps=num_warmup_steps,
             init_embedding=FLAGS.init_embedding)
     elif FLAGS.model == "dict_concat":
+        config = DictConcatModel.DictConcatConfig.from_json_file(FLAGS.config_file)
         model_fn = DictConcatModel.model_fn_builder(
+            config=config,
+            init_checkpoint=FLAGS.init_checkpoint,
+            learning_rate=FLAGS.learning_rate,
+            tokenizer=tokenizer,
+            num_train_steps=num_train_steps,
+            num_warmup_steps=num_warmup_steps,
+            init_embedding=FLAGS.init_embedding)
+    elif FLAGS.model == "attend_dict":
+        config = AttendedDictModel.AttendDictConfig.from_json_file(FLAGS.config_file)
+        model_fn = AttendedDictModel.model_fn_builder(
+            config=config,
+            init_checkpoint=FLAGS.init_checkpoint,
+            learning_rate=FLAGS.learning_rate,
+            tokenizer=tokenizer,
+            num_train_steps=num_train_steps,
+            num_warmup_steps=num_warmup_steps,
+            init_embedding=FLAGS.init_embedding)
+    elif FLAGS.model == "attend_input":
+        config = AttendedInputModel.AttendInputConfig.from_json_file(FLAGS.config_file)
+        model_fn = AttendedInputModel.model_fn_builder(
             config=config,
             init_checkpoint=FLAGS.init_checkpoint,
             learning_rate=FLAGS.learning_rate,

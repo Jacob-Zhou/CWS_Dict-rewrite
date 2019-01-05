@@ -22,8 +22,6 @@ flags.DEFINE_string('output_dir', 'data',
                     "The output data dir")
 flags.DEFINE_string('output', None,
                     "The input data file name, should without suffix")
-flags.DEFINE_string("vocab_file", None,
-                    "The vocabulary file that the BERT model was trained on.")
 flags.DEFINE_bool("log", False,
                   "show log on the console or not")
 
@@ -105,6 +103,5 @@ def main(_):
 if __name__ == '__main__':
     flags.mark_flag_as_required("input")
     flags.mark_flag_as_required("output")
-    flags.mark_flag_as_required("vocab_file")
     tf.app.run()
 
