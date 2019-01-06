@@ -150,10 +150,10 @@ class AttendDictModel(object):
                 activation_fn=tf.sigmoid
             )
             # [B, L, D]
+            self.dict = tf.cast(self.dict, dtype=tf.float32)
             attend_dict = tf.multiply(self.dict, dict_attention)
 
         with tf.variable_scope('dict'):
-            self.dict = tf.cast(self.dict, dtype=tf.float32)
             (forward_output, backword_output), _ = tf.nn.bidirectional_dynamic_rnn(
                 cell_fw=lstm_cell(config.dict_hidden_size),
                 cell_bw=lstm_cell(config.dict_hidden_size),

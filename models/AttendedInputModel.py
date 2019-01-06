@@ -148,6 +148,7 @@ class AttendInputModel(object):
                 activation_fn=tf.sigmoid
             )
             # [B, L, F] * [B, L, F, E] -> [B, L, F, E]
+            input_attention = tf.expand_dims(input_attention, -1)
             attend_input = tf.multiply(x, input_attention)
             attend_input = tf.reshape(attend_input, [self.batch_size, -1, feat_size * config.embedding_size])
             attend_input = model_utils.dropout(attend_input, config.embedding_dropout_prob)

@@ -130,7 +130,7 @@ def file_based_input_fn_builder(input_file, batch_size, is_training,
         d = tf.data.TFRecordDataset(input_file)
         if is_training:
             d = d.repeat()
-            d = d.shuffle(buffer_size=100)
+            d = d.shuffle(buffer_size=1000)
 
         d = d.map(map_func=lambda record: _decode_record(record, name_to_features))
         d = d.padded_batch(batch_size=batch_size,
