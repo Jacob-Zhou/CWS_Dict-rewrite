@@ -1,3 +1,4 @@
+import codecs
 import collections
 from typing import *
 import os
@@ -199,6 +200,9 @@ class CWSProcessor(DataProcessor):
         """See base class."""
         return {"B": 0, "M": 1, "E": 2, "S": 3}
 
+    def get_break_ids(self):
+        return [2, 3]
+
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
@@ -221,6 +225,79 @@ class CWSProcessor(DataProcessor):
             label = ["B"]
             for i in range(1, len(w) - 1):
                 label.append("M")
+            label.append("E")
+            return label
+
+        words = text.split()
+        labels = []
+        for word in words:
+            labels += word2label(word)
+        return "".join(labels)
+
+    def evaluate_word_PRF(self, y_pred, y):
+        import itertools
+        y_pred = list(itertools.chain.from_iterable(y_pred))
+        y = list(itertools.chain.from_iterable(y))
+        assert len(y_pred) == len(y)
+        cor_num = 0
+        break_ids = self.get_break_ids()
+        yp_word_num = 0
+        yt_word_num =0
+        for i in break_ids:
+            yp_word_num += y_pred.count(i)
+            yt_word_num += y.count(i)
+        # yp_word_num = y_pred.count(2) + y_pred.count(3)
+        # yt_word_num = y.count(2) + y.count(3)
+        start = 0
+        for i in range(len(y)):
+            if y[i] in break_ids:
+                flag = True
+                for j in range(start, i + 1):
+                    if y[j] != y_pred[j]:
+                        flag = False
+                if flag:
+                    cor_num += 1
+                start = i + 1
+
+        P = cor_num / float(yp_word_num)
+        R = cor_num / float(yt_word_num)
+        F = 2 * P * R / (P + R)
+        return P, R, F
+
+    def convert_word_segmentation(self, x, y, output_dir, output_file='result.txt'):
+        if not os.path.exists(output_dir):
+            os.mkdir(output_dir)
+        output_file = os.path.join(output_dir, output_file)
+        f = codecs.open(output_file, 'w', encoding='utf-8')
+        break_ids = self.get_break_ids()
+        for i in range(len(x)):
+            sentence = []
+            for j in range(len(x[i])):
+                if y[i][j] in break_ids:
+                    sentence.append(x[i][j])
+                    sentence.append("  ")
+                else:
+                    sentence.append(x[i][j])
+            f.write(''.join(sentence).strip() + '\n')
+        f.close()
+
+
+class BiLabelProcessor(CWSProcessor):
+    def get_labels(self):
+        """See base class."""
+        return {"N": 0, "E": 1}
+
+    def get_break_ids(self):
+        return [1]
+
+    @staticmethod
+    def _labels_words(text):
+        def word2label(w):
+            if len(w) == 1:
+                return ["E"]
+            label = []
+            for i in range(len(w) - 1):
+                label.append("N")
             label.append("E")
             return label
 

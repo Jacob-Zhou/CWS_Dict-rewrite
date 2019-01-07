@@ -151,35 +151,6 @@ def get_info(info_file):
     return info
 
 
-def predict(estimator, predict_file, tokenizer, dict_builder=None, name="predict"):
-    predict_input_fn = file_based_input_fn_builder(
-        input_file=predict_file,
-        batch_size=FLAGS.predict_batch_size,
-        is_training=False,
-        drop_remainder=False,
-        input_dim=tokenizer.dim,
-        dict_dim=dict_builder.dim if dict_builder is not None else 1)
-    predictions = []
-    ground_truths = []
-    texts = []
-    for result in estimator.predict(input_fn=predict_input_fn, yield_single_examples=True):
-        input_ids = result["input_ids"].astype(int)
-        prediction = result["prediction"].astype(int)
-        ground_truth = result["ground_truths"].astype(int)
-        length = int(result["length"])
-        if length == 0:
-            continue
-        tokens = tokenizer.convert_ids_to_tokens(input_ids[:length])
-        predictions.append(prediction[:length].tolist())
-        ground_truths.append(ground_truth[:length].tolist())
-        text = [utils.printable_text(x) for x in tokens]
-        texts.append(text)
-    P, R, F = utils.evaluate_word_PRF(predictions, ground_truths)
-    print('%s Test: P:%f R:%f F:%f' % (FLAGS.data_dir, P, R, F))
-    utils.convert_word_segmentation(texts, predictions, FLAGS.output_dir, name)
-    utils.convert_word_segmentation(texts, ground_truths, FLAGS.output_dir, name + "_golden")
-
-
 def main(_):
     if FLAGS.do_train:
         tf.logging.set_verbosity(tf.logging.INFO)
@@ -343,7 +314,32 @@ def main(_):
         tf.logging.info("  Num examples = %d", len(test_examples))
         tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
 
-        predict(estimator, test_file, tokenizer=tokenizer, dict_builder=dict_builder)
+        predict_input_fn = file_based_input_fn_builder(
+            input_file=test_file,
+            batch_size=FLAGS.predict_batch_size,
+            is_training=False,
+            drop_remainder=False,
+            input_dim=tokenizer.dim,
+            dict_dim=dict_builder.dim if dict_builder is not None else 1)
+        predictions = []
+        ground_truths = []
+        texts = []
+        for result in estimator.predict(input_fn=predict_input_fn, yield_single_examples=True):
+            input_ids = result["input_ids"].astype(int)
+            prediction = result["prediction"].astype(int)
+            ground_truth = result["ground_truths"].astype(int)
+            length = int(result["length"])
+            if length == 0:
+                continue
+            tokens = tokenizer.convert_ids_to_tokens(input_ids[:length])
+            predictions.append(prediction[:length].tolist())
+            ground_truths.append(ground_truth[:length].tolist())
+            text = [utils.printable_text(x) for x in tokens]
+            texts.append(text)
+        P, R, F = utils.evaluate_word_PRF(predictions, ground_truths)
+        print('%s Test: P:%f R:%f F:%f' % (FLAGS.data_dir, P, R, F))
+        processor.convert_word_segmentation(texts, predictions, FLAGS.output_dir, "predict")
+        processor.convert_word_segmentation(texts, ground_truths, FLAGS.output_dir, "predict_golden")
 
 
 if __name__ == "__main__":
