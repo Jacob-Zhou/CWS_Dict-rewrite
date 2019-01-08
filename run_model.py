@@ -94,6 +94,8 @@ flags.DEFINE_integer("save_checkpoints_steps", 1000,
 
 flags.DEFINE_string("init_embedding", None, "Initial Embedding.")
 
+flags.DEFINE_string("processor", "CWSProcessor", "BiLabelProcessor or CWSProcessor")
+
 
 def file_based_input_fn_builder(input_file, batch_size, is_training,
                                 drop_remainder, input_dim=5, dict_dim=1):
@@ -182,7 +184,7 @@ def main(_):
         model_dir=FLAGS.output_dir,
         save_checkpoints_steps=FLAGS.save_checkpoints_steps)
 
-    processor = process.CWSProcessor()
+    processor = getattr(process, FLAGS.processor)
 
     train_examples = None
     num_early_steps = None
