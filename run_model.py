@@ -184,7 +184,7 @@ def main(_):
         model_dir=FLAGS.output_dir,
         save_checkpoints_steps=FLAGS.save_checkpoints_steps)
 
-    processor = getattr(process, FLAGS.processor)
+    processor = getattr(process, FLAGS.processor)()
 
     train_examples = None
     num_early_steps = None
