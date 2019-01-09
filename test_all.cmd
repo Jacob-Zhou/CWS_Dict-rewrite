@@ -1,5 +1,0 @@
-python run_model.py --do_train=false --do_eval=false --do_predict=true --train_batch_size=128 --data_dir=data/msr --vocab_file=data/vocab.txt --config_file=config/baseline.json --output_dir=output/msr --init_embedding=data/wordvec_100 --learning_rate=0.001 --num_train_epochs=15.0 
-: python run_model.py --do_train=true --do_eval=true --do_predict=true --train_batch_size=128 --data_dir=data/as --vocab_file=data/vocab.txt --config_file=config/baseline.json --output_dir=output/as --init_embedding=data/wordvec_100 --learning_rate=0.001 --num_train_epochs=15.0 
-: python run_model.py --do_train=true --do_eval=true --do_predict=true --train_batch_size=128 --data_dir=data/cityu --vocab_file=data/vocab.txt --config_file=config/baseline.json --output_dir=output/cityu --init_embedding=data/wordvec_100 --learning_rate=0.01 --num_train_epochs=15.0 
-: python run_model.py --do_train=true --do_eval=true --do_predict=true --train_batch_size=128 --data_dir=data/pku --vocab_file=data/vocab.txt --config_file=config/baseline.json --output_dir=output/pku --init_embedding=data/wordvec_100 --learning_rate=0.01 --num_train_epochs=15.0 
-pause
