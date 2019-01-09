@@ -255,6 +255,7 @@ class CWSProcessor(DataProcessor):
                 for j in range(start, i + 1):
                     if y[j] != y_pred[j]:
                         flag = False
+                        break
                 if flag:
                     cor_num += 1
                 start = i + 1
@@ -342,6 +343,7 @@ class BiLabelProcessor(CWSProcessor):
                 for j in range(start, i + 1):
                     if y[j] != y_pred[j]:
                         flag = False
+                        break
                 if flag:
                     cor_num += 1
                 start = i + 1
