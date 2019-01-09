@@ -149,7 +149,6 @@ class BiLSTMModel(object):
 
         with tf.variable_scope('rnn'):
             if config.bi_direction:
-                print('bi_direction is true')
                 (forward_output, backword_output), _ = tf.nn.bidirectional_dynamic_rnn(
                     cell_fw=fw_multi_cell,
                     cell_bw=bw_multi_cell,
@@ -159,7 +158,6 @@ class BiLSTMModel(object):
                 )
                 output = tf.concat([forward_output, backword_output], axis=2)
             else:
-                print('bi_direction is false')
                 forward_output, _ = tf.nn.dynamic_rnn(
                     cell=fw_multi_cell,
                     inputs=x,
@@ -174,14 +172,14 @@ class BiLSTMModel(object):
                 num_outputs=config.num_classes,
                 activation_fn=None
             )
-            self.prediction = tf.argmax(logits)
+            self.prediction = tf.argmax(logits, axis=-1)
 
         with tf.variable_scope('loss'):
-            weight = tf.sequence_mask(seq_length, dtype=tf.int64)
+            weight = tf.sequence_mask(seq_length, dtype=tf.float32)
             self.loss = tf.contrib.seq2seq.sequence_loss(
-                logits,
-                self.label_ids,
-                weight,
+                logits=logits,
+                targets=self.label_ids,
+                weights=weight,
                 average_across_timesteps=True,
                 average_across_batch=True
             )
@@ -269,7 +267,6 @@ def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
             weight = tf.sequence_mask(seq_length, dtype=tf.int64)
             accuracy = tf.metrics.accuracy(label_ids, prediction, weights=weight)
             metrics = {
-                "eval_loss": loss,
                 "accuracy": accuracy
             }
 

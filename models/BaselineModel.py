@@ -137,11 +137,9 @@ class BaselineModel(object):
 
         with tf.variable_scope('rnn_cell'):
             if config.rnn_cell == 'lstm':
-                print('rnn_cell is lstm')
                 self.fw_cell = tf.nn.rnn_cell.LSTMCell(config.hidden_size, name='basic_lstm_cell')
                 self.bw_cell = tf.nn.rnn_cell.LSTMCell(config.hidden_size, name='basic_lstm_cell')
             else:
-                print('rnn_cell is gru')
                 self.fw_cell = rnn.GRUCell(config.hidden_size)
                 self.bw_cell = rnn.GRUCell(config.hidden_size)
             self.fw_cell = rnn.DropoutWrapper(self.fw_cell, output_keep_prob=1.0 - config.hidden_dropout_prob)
@@ -151,7 +149,6 @@ class BaselineModel(object):
 
         with tf.variable_scope('rnn'):
             if config.bi_direction:
-                print('bi_direction is true')
                 (forward_output, backword_output), _ = tf.nn.bidirectional_dynamic_rnn(
                     cell_fw=self.fw_multi_cell,
                     cell_bw=self.bw_multi_cell,

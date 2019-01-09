@@ -5,6 +5,7 @@ from models import BaselineModel
 from models import DictConcatModel
 from models import AttendedDictModel
 from models import AttendedInputModel
+from models import BiLSTMModel
 import tokenization
 import dictionary_builder
 import tensorflow as tf
@@ -239,6 +240,16 @@ def main(_):
             num_train_steps=num_train_steps,
             num_warmup_steps=num_warmup_steps,
             init_embedding=FLAGS.init_embedding)
+    elif FLAGS.model == "bilstm":
+        config = BiLSTMModel.BiLSTMConfig.from_json_file(FLAGS.config_file)
+        model_fn = BiLSTMModel.model_fn_builder(
+            config=config,
+            init_checkpoint=FLAGS.init_checkpoint,
+            learning_rate=FLAGS.learning_rate,
+            tokenizer=tokenizer,
+            num_train_steps=num_train_steps,
+            num_warmup_steps=num_warmup_steps,
+            init_embedding=FLAGS.init_embedding)
 
     # If TPU is not available, this will fall back to normal Estimator on CPU
     # or GPU.
@@ -338,7 +349,7 @@ def main(_):
             ground_truths.append(ground_truth[:length].tolist())
             text = [utils.printable_text(x) for x in tokens]
             texts.append(text)
-        P, R, F = utils.evaluate_word_PRF(predictions, ground_truths)
+        P, R, F = processor.evaluate_word_PRF(predictions, ground_truths)
         print('%s Test: P:%f R:%f F:%f' % (FLAGS.data_dir, P, R, F))
         processor.convert_word_segmentation(texts, predictions, FLAGS.output_dir, "predict")
         processor.convert_word_segmentation(texts, ground_truths, FLAGS.output_dir, "predict_golden")
