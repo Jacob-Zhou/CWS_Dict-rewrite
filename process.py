@@ -45,7 +45,8 @@ def convert_single_example(ex_index, example: InputExample,
     """Converts a single `InputExample` into a single `InputFeatures`."""
     # label_map = {"B": 0, "M": 1, "E": 2, "S": 3}
 
-    tokens_raw = tokenizer.tokenize(example.text)
+    # tokens_raw = tokenizer.tokenize(example.text)
+    tokens_raw = list(example.text)
     labels_raw = example.labels
 
     # Account for [CLS] and [SEP] with "- 2"
@@ -211,6 +212,7 @@ class CWSProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, i)
             text = utils.convert_to_unicode(line.strip())
             labels = self._labels_words(text)
+            text=re.sub(u'\s+','',text.strip())
             examples.append(
                 InputExample(guid=guid, text=text, labels=labels))
         return examples
