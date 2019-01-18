@@ -6,6 +6,7 @@ import tensorflow as tf
 import csv
 import tokenization
 import numpy as np
+import re
 
 import utils
 
