@@ -75,6 +75,11 @@ flags.DEFINE_bool(
     "early_stop", True,
     "Whether to use early stop.")
 
+flags.DEFINE_float(
+    "dict_augment_rate", 0,
+    "the probability of filp dict input")
+
+
 flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
 
 flags.DEFINE_float("num_train_epochs", 3.0,
@@ -117,8 +122,17 @@ def file_based_input_fn_builder(input_file, batch_size, is_training,
         example["input_ids"] = tf.sparse.to_dense(example["input_ids"])
         example["input_ids"] = tf.reshape(example["input_ids"], shape=[-1, input_dim])
 
-        example["input_dicts"] = tf.sparse.to_dense(example["input_dicts"])
-        example["input_dicts"] = tf.reshape(example["input_dicts"], shape=[-1, dict_dim])
+        input_dicts = tf.sparse.to_dense(example["input_dicts"])
+        input_dicts = tf.reshape(input_dicts, shape=[-1, dict_dim])
+        if FLAGS.dict_augment_rate == 0:
+            example["input_dicts"] = input_dicts
+        else:
+            flip_mask = tf.random.uniform(tf.shape(input_dicts)) < FLAGS.dict_augment_rate
+            # flip if flip mask is true
+            input_dicts = tf.cast(input_dicts, dtype=tf.bool)
+            input_dicts = tf.logical_xor(input_dicts, flip_mask)
+            input_dicts = tf.cast(input_dicts, dtype=tf.int64)
+            example["input_dicts"] = input_dicts
 
         example["label_ids"] = tf.sparse.to_dense(example["label_ids"])
         example["label_ids"] = tf.reshape(example["label_ids"], shape=[-1])
