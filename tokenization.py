@@ -21,6 +21,7 @@ from __future__ import print_function
 import collections
 import unicodedata
 import six
+import re
 import tensorflow as tf
 import utils
 
@@ -43,14 +44,17 @@ def load_vocab(vocab_files):
     return vocab
 
 
-def convert_by_vocab(vocab, items, unk_token="U"):
+def convert_by_vocab(vocab, items, unk_token="U", bi_unk_token="UB"):
     """Converts a sequence of [tokens|ids] using the vocab."""
     output = []
     for item in items:
         if item in vocab:
             output.append(vocab[item])
         else:
-            output.append(vocab[unk_token])
+            if len(item) == 2 and bi_unk_token in vocab:
+                output.append(vocab[bi_unk_token])
+            else:
+                output.append(vocab[unk_token])
     return output
 
 

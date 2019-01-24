@@ -214,6 +214,7 @@ def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
 
         tf.logging.info("**** Trainable Variables ****")
         for var in tvars:
+            utils.variable_summaries(var)
             init_string = ""
             if var.name in initialized_variable_names:
                 init_string = ", *INIT_FROM_CKPT*"
@@ -222,12 +223,10 @@ def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
 
         if mode == tf.estimator.ModeKeys.TRAIN:
             (total_loss, per_example_loss, label_ids, prediction, seq_length) = model.get_all_results()
-            loss = tf.metrics.mean(per_example_loss)
 
             weight = tf.sequence_mask(seq_length, dtype=tf.int64)
             accuracy = tf.metrics.accuracy(label_ids, prediction, weights=weight)
 
-            tf.summary.scalar('loss', loss[1])
             tf.summary.scalar('accuracy', accuracy[1])
 
             l2_reg_lamda = config.l2_reg_lamda
@@ -241,8 +240,7 @@ def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
                 global_step = tf.train.get_or_create_global_step()
                 train_op = optimizer.apply_gradients(zip(grads, tvars), global_step=global_step)
 
-            logging_hook = tf.train.LoggingTensorHook({"loss": total_loss,
-                                                       "accuracy": accuracy[1]}, every_n_iter=100)
+            logging_hook = tf.train.LoggingTensorHook({"accuracy": accuracy[1]}, every_n_iter=100)
 
             output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
@@ -257,7 +255,7 @@ def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
             accuracy = tf.metrics.accuracy(label_ids, prediction, weights=weight)
             metrics = {
                 "eval_loss": loss,
-                "accuracy": accuracy
+                "eval_accuracy": accuracy
             }
 
             output_spec = tf.estimator.EstimatorSpec(

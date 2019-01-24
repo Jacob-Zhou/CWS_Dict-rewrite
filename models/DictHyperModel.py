@@ -1,26 +1,26 @@
 # -*- coding: utf-8 -*-
 import copy
-import numpy as np
+import json
+import six
 import tensorflow as tf
 from tensorflow.contrib import rnn
 from tensorflow.contrib import layers
 from tensorflow.contrib import crf
-import six
-import json
+from .supercell import HyperLSTMCell
 import model_utils
-import utils
 import optimization
+import utils
 
-__all__ = ["BaselineConfig", "BaselineModel", "model_fn_builder"]
 
-
-class BaselineConfig(object):
-    """Configuration for `BaselineModel`."""
+class DictHyperConfig(object):
+    """Configuration for `DictConcatConfig`."""
 
     def __init__(self,
                  vocab_size,
                  embedding_size=100,
+                 hyper_embedding_size=16,
                  hidden_size=128,
+                 dict_hidden_size=160,
                  num_hidden_layers=1,
                  bi_direction=True,
                  rnn_cell="lstm",
@@ -51,6 +51,7 @@ class BaselineConfig(object):
             initializing all weight matrices.
         """
         self.l2_reg_lamda = l2_reg_lamda
+        self.dict_hidden_size = dict_hidden_size
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -59,12 +60,13 @@ class BaselineConfig(object):
         self.hidden_dropout_prob = hidden_dropout_prob
         self.embedding_dropout_prob = embedding_dropout_prob
         self.embedding_size = embedding_size
+        self.hyper_embedding_size = hyper_embedding_size
         self.num_classes = num_classes
 
     @classmethod
     def from_dict(cls, json_object):
         """Constructs a `BaselineConfig` from a Python dictionary of parameters."""
-        config = BaselineConfig(vocab_size=None)
+        config = DictHyperConfig(vocab_size=None)
         for (key, value) in six.iteritems(json_object):
             config.__dict__[key] = value
         return config
@@ -86,29 +88,20 @@ class BaselineConfig(object):
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
 
-class BaselineModel(object):
+class DictHyperModel(object):
     '''
-    Baseline models
-    BiLSTM+CRF and Stacked BiLSTM+CRF
+    Model 1
+    Concating outputs of two parallel Bi-LSTMs which take feature vectors and embedding vectors
+    as inputs respectively.
     '''
-    def __init__(self, config: BaselineConfig, is_training, input_ids, label_ids, seq_length, init_embedding=None):
-        """Constructor for BertModel.
 
-        Args:
-          config: `BertConfig` instance.
-          is_training: bool. rue for training model, false for eval model. Controls
-            whether dropout will be applied.
-          input_ids: int64 Tensor of shape [batch_size, seq_length, feat_size].
-          label_ids: (optional) int64 Tensor of shape [batch_size, seq_length].
-          seq_length: (optional) int64 Tensor of shape [batch_size].
-          init_embedding: (optional)
+    def __init__(self, config: DictHyperConfig, is_training,
+                 input_ids, label_ids, input_dicts, seq_length,
+                 init_embedding=None):
 
-        Raises:
-          ValueError: The config is invalid or one of the input tensor shapes
-            is invalid.
-        """
         self.input_ids = input_ids
         self.label_ids = label_ids
+        self.dict = input_dicts
         self.seq_length = seq_length
         self.is_training = is_training
         input_shape = model_utils.get_shape_list(input_ids, expected_rank=3)
@@ -135,13 +128,14 @@ class BaselineModel(object):
 
         x = model_utils.dropout(x, config.embedding_dropout_prob)
 
-        def lstm_cell(dim):
-            cell = tf.nn.rnn_cell.LSTMCell(dim, name='basic_lstm_cell')
-            cell = rnn.DropoutWrapper(cell, output_keep_prob=1.0 - config.hidden_dropout_prob)
-            cell = tf.nn.rnn_cell.MultiRNNCell([cell] * config.num_hidden_layers)
+        def hyperlstm_cell(dim):
+            cell = HyperLSTMCell(num_units=config.hidden_size, forget_bias=1.0, use_recurrent_dropout=False,
+                               dropout_keep_prob=1.0, use_layer_norm=False, hyper_num_units=config.dict_hidden_size,
+                               hyper_embedding_size=config.hyper_embedding_size, hyper_use_recurrent_dropout=False)
+            cell = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=1 - config.hidden_dropout_prob)
             return cell
 
-        with tf.variable_scope('rnn'):
+        with tf.variable_scope('character'):
             (forward_output, backword_output), _ = tf.nn.bidirectional_dynamic_rnn(
                 cell_fw=lstm_cell(config.hidden_size),
                 cell_bw=lstm_cell(config.hidden_size),
@@ -151,7 +145,19 @@ class BaselineModel(object):
             )
             output = tf.concat([forward_output, backword_output], axis=2)
 
+        with tf.variable_scope('dict'):
+            self.dict = tf.cast(self.dict, dtype=tf.float32)
+            (forward_output, backword_output), _ = tf.nn.bidirectional_dynamic_rnn(
+                cell_fw=lstm_cell(config.dict_hidden_size),
+                cell_bw=lstm_cell(config.dict_hidden_size),
+                inputs=self.dict,
+                sequence_length=self.seq_length,
+                dtype=tf.float32
+            )
+            dict_output = tf.concat([forward_output, backword_output], axis=2)
+
         with tf.variable_scope('output'):
+            output = tf.concat([dict_output, output], axis=2)
             scores = layers.fully_connected(
                 inputs=output,
                 num_outputs=config.num_classes,
@@ -164,7 +170,6 @@ class BaselineModel(object):
             # crf
             self.log_likelihood, _ = crf.crf_log_likelihood(
                 scores, self.label_ids, self.seq_length, transition_param)
-
             self.loss = tf.reduce_mean(-self.log_likelihood)
 
     def get_all_results(self):
@@ -195,13 +200,14 @@ def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
             tf.logging.info("  name = %s, shape = %s" % (name, features[name].shape))
 
         input_ids = features["input_ids"]
+        input_dicts = features["input_dicts"]
         seq_length = features["seq_length"]
         label_ids = features["label_ids"]
 
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-        model = BaselineModel(
-            config, is_training, input_ids, label_ids, seq_length, embedding)
+        model = DictConcatModel(
+            config, is_training, input_ids, label_ids, input_dicts, seq_length, embedding)
 
         tvars = tf.trainable_variables()
         initialized_variable_names = {}
@@ -226,9 +232,6 @@ def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
             accuracy = tf.metrics.accuracy(label_ids, prediction, weights=weight)
 
             tf.summary.scalar('accuracy', accuracy[1])
-
-            # train_op = optimization.create_optimizer(
-            #     total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu=False)
 
             l2_reg_lamda = config.l2_reg_lamda
             clip = 5
@@ -275,5 +278,4 @@ def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
         return output_spec
 
     return model_fn
-
 

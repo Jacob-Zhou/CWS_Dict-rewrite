@@ -6,6 +6,7 @@ import tensorflow as tf
 import csv
 import tokenization
 import numpy as np
+import re
 
 import utils
 
@@ -45,7 +46,8 @@ def convert_single_example(ex_index, example: InputExample,
     """Converts a single `InputExample` into a single `InputFeatures`."""
     # label_map = {"B": 0, "M": 1, "E": 2, "S": 3}
 
-    tokens_raw = tokenizer.tokenize(example.text)
+    # tokens_raw = tokenizer.tokenize(example.text)
+    tokens_raw = list(example.text)
     labels_raw = example.labels
 
     # Account for [CLS] and [SEP] with "- 2"
@@ -84,7 +86,7 @@ def convert_single_example(ex_index, example: InputExample,
     # The mask has 1 for real tokens and 0 for padding tokens. Only real
     # tokens are attended to.
 
-    if ex_index < 5:
+    if ex_index < 1:
         tf.logging.info("*** Example ***")
         tf.logging.info("guid:        %s" % example.guid)
         tf.logging.info("tokens:      %s" % " ".join(
@@ -211,6 +213,7 @@ class CWSProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, i)
             text = utils.convert_to_unicode(line.strip())
             labels = self._labels_words(text)
+            text = re.sub(u'\s+','',text.strip())
             examples.append(
                 InputExample(guid=guid, text=text, labels=labels))
         return examples
@@ -242,7 +245,7 @@ class CWSProcessor(DataProcessor):
         cor_num = 0
         break_ids = self.get_break_ids()
         yp_word_num = 0
-        yt_word_num =0
+        yt_word_num = 0
         for i in break_ids:
             yp_word_num += y_pred.count(i)
             yt_word_num += y.count(i)
@@ -255,6 +258,7 @@ class CWSProcessor(DataProcessor):
                 for j in range(start, i + 1):
                     if y[j] != y_pred[j]:
                         flag = False
+                        break
                 if flag:
                     cor_num += 1
                 start = i + 1
@@ -306,3 +310,48 @@ class BiLabelProcessor(CWSProcessor):
         for word in words:
             labels += word2label(word)
         return "".join(labels)
+
+    def evaluate_word_PRF(self, y_pred, y):
+        import itertools
+        y_pred = list(itertools.chain.from_iterable(y_pred))
+        y = list(itertools.chain.from_iterable(y))
+        assert len(y_pred) == len(y)
+        cor_num = 0
+        break_ids = self.get_break_ids()
+        yp_word_num = 0
+        yt_word_num = 0
+        for i in break_ids:
+            yp_word_num += y_pred.count(i)
+            yt_word_num += y.count(i)
+        # yp_word_num = y_pred.count(2) + y_pred.count(3)
+        # yt_word_num = y.count(2) + y.count(3)
+        start = 0
+        len_y = len(y)
+        for i in range(len_y - 1):
+            if y_pred[i] == 1 or y_pred[i] == 3:
+                if y_pred[i + 1] == 1:
+                    y_pred[i + 1] = 3
+                else:
+                    y_pred[i + 1] = 2
+
+            if y[i] == 1 or y[i] == 3:
+                if y[i + 1] == 1:
+                    y[i + 1] = 3
+                else:
+                    y[i + 1] = 2
+
+        for i in range(len_y):
+            if y[i] == 1 or y[i] == 3:
+                flag = True
+                for j in range(start, i + 1):
+                    if y[j] != y_pred[j]:
+                        flag = False
+                        break
+                if flag:
+                    cor_num += 1
+                start = i + 1
+
+        P = cor_num / float(yp_word_num)
+        R = cor_num / float(yt_word_num)
+        F = 2 * P * R / (P + R)
+        return P, R, F

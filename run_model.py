@@ -6,6 +6,7 @@ from models import DictConcatModel
 from models import AttendedDictModel
 from models import AttendedInputModel
 from models import BiLSTMModel
+from models import DictHyperModel
 import tokenization
 import dictionary_builder
 import tensorflow as tf
@@ -99,7 +100,7 @@ flags.DEFINE_string("processor", "CWSProcessor", "BiLabelProcessor or CWSProcess
 
 
 def file_based_input_fn_builder(input_file, batch_size, is_training,
-                                drop_remainder, input_dim=5, dict_dim=1):
+                                drop_remainder, input_dim=5, dict_dim=1, shuffle_buffer=1000):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
 
     name_to_features = {
@@ -132,17 +133,16 @@ def file_based_input_fn_builder(input_file, batch_size, is_training,
         # For eval, we want no shuffling and parallel reading doesn't matter.
         d = tf.data.TFRecordDataset(input_file)
         if is_training:
-            d = d.repeat()
-            d = d.shuffle(buffer_size=1000)
+            d = d.apply(tf.data.experimental.shuffle_and_repeat(shuffle_buffer))
 
-        d = d.map(map_func=lambda record: _decode_record(record, name_to_features))
+        d = d.map(map_func=lambda record: _decode_record(record, name_to_features), num_parallel_calls=6)
         d = d.padded_batch(batch_size=batch_size,
                            padded_shapes={"input_ids": [None, input_dim],
                                           "input_dicts": [None, dict_dim],
                                           "label_ids": [None],
                                           "seq_length": []},
                            drop_remainder=drop_remainder)
-
+        d = d.prefetch(buffer_size=batch_size + 1)
         return d
 
     return input_fn
@@ -193,10 +193,9 @@ def main(_):
     num_warmup_steps = None
     if FLAGS.do_train:
         train_examples = processor.get_train_examples(FLAGS.data_dir)
-        num_train_steps = int(
-            len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
-        num_early_steps = int(
-            len(train_examples) / FLAGS.train_batch_size * 5)
+        single_epoch_steps = int(len(train_examples) / FLAGS.train_batch_size)
+        num_train_steps = int(single_epoch_steps * FLAGS.num_train_epochs)
+        num_early_steps = int(single_epoch_steps * 5)
         num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
 
     model_fn = None
@@ -213,6 +212,16 @@ def main(_):
     elif FLAGS.model == "dict_concat":
         config = DictConcatModel.DictConcatConfig.from_json_file(FLAGS.config_file)
         model_fn = DictConcatModel.model_fn_builder(
+            config=config,
+            init_checkpoint=FLAGS.init_checkpoint,
+            learning_rate=FLAGS.learning_rate,
+            tokenizer=tokenizer,
+            num_train_steps=num_train_steps,
+            num_warmup_steps=num_warmup_steps,
+            init_embedding=FLAGS.init_embedding)
+    elif FLAGS.model == "dict_hyper":
+        config = DictHyperModel.DictHyperConfig.from_json_file(FLAGS.config_file)
+        model_fn = DictHyperModel.model_fn_builder(
             config=config,
             init_checkpoint=FLAGS.init_checkpoint,
             learning_rate=FLAGS.learning_rate,
@@ -251,6 +260,7 @@ def main(_):
             num_warmup_steps=num_warmup_steps,
             init_embedding=FLAGS.init_embedding)
 
+
     # If TPU is not available, this will fall back to normal Estimator on CPU
     # or GPU.
     estimator = tf.estimator.Estimator(
@@ -272,7 +282,8 @@ def main(_):
             is_training=True,
             drop_remainder=True,
             input_dim=tokenizer.dim,
-            dict_dim=dict_builder.dim if dict_builder is not None else 1)
+            dict_dim=dict_builder.dim if dict_builder is not None else 1,
+            shuffle_buffer=len(train_examples))
 
         eval_input_fn = None
         if FLAGS.do_eval:
@@ -298,11 +309,11 @@ def main(_):
             assert eval_input_fn is not None, "early_stop request do_eval"
             early_stopping = tf.contrib.estimator.stop_if_no_increase_hook(
                 estimator,
-                metric_name='accuracy',
+                metric_name='eval_accuracy',
                 max_steps_without_increase=num_early_steps,
-                min_steps=num_train_steps,
+                min_steps=num_early_steps,
                 run_every_secs=None,
-                run_every_steps=1000)
+                run_every_steps=single_epoch_steps)
 
             tf.estimator.train_and_evaluate(estimator,
                                             train_spec=tf.estimator.TrainSpec(train_input_fn, hooks=[early_stopping]),
