@@ -122,3 +122,8 @@ data*
 # pyCharm
 .idea
 original_data/CTB5_train.txt
+
+# experment script
+legacy
+
+debug

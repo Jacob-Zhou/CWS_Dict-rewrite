@@ -30,8 +30,14 @@ def file_based_input_fn_builder(input_file, batch_size, is_training,
         example["input_ids"] = tf.sparse.to_dense(example["input_ids"])
         example["input_ids"] = tf.reshape(example["input_ids"], shape=[-1, input_dim])
 
-        example["input_dicts"] = tf.sparse.to_dense(example["input_dicts"])
-        example["input_dicts"] = tf.reshape(example["input_dicts"], shape=[-1, dict_dim])
+        input_dicts = tf.sparse.to_dense(example["input_dicts"])
+        input_dicts = tf.reshape(input_dicts, shape=[-1, dict_dim])
+        flip_mask = tf.random.uniform(tf.shape(input_dicts)) < 0.05
+        # flip if flip mask is true
+        input_dicts = tf.cast(input_dicts, dtype=tf.bool)
+        input_dicts = tf.logical_xor(input_dicts, flip_mask)
+        input_dicts = tf.cast(input_dicts, dtype=tf.int64)
+        example["input_dicts"] = input_dicts
 
         example["label_ids"] = tf.sparse.to_dense(example["label_ids"])
         example["label_ids"] = tf.reshape(example["label_ids"], shape=[-1])
@@ -72,14 +78,34 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
 
     tokenizer = tokenization.WindowBigramTokenizer(
-        vocab_file="data/cityu/vocab_337788.txt", bigram_file="data/empty",
+        vocab_file="data/cityu/vocab.txt", bigram_file="data/empty",
         do_lower_case=False, window_size=5)
 
     processor = getattr(process, "CWSProcessor")()
+<<<<<<< HEAD
     train_file = os.path.join("debut", "train.tf_record")
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+    train_examples = processor.get_test_examples("data/cityu")
+=======
     train_examples = processor.get_train_examples(FLAGS.data_dir)
+>>>>>>> parent of a75e8d3... fix bug in dict hyper model
+=======
+    train_examples = processor.get_train_examples(FLAGS.data_dir)
+>>>>>>> parent of a75e8d3... fix bug in dict hyper model
+=======
+    train_examples = processor.get_train_examples(FLAGS.data_dir)
+>>>>>>> parent of a75e8d3... fix bug in dict hyper model
+=======
+    train_file = os.path.join("debug", "train.tf_record")
+    train_examples = processor.get_train_examples("data/cityu")
+    dict_builder = dictionary_builder.DefaultDictionaryBuilder("data/dict/dict_2",
+                                                min_word_len=2,
+                                                max_word_len=5)
+>>>>>>> parent of 6549cd3... broke commit
     process.file_based_convert_examples_to_features(
-        examples=train_examples, tokenizer=tokenizer, dict_builder=None,
+        examples=train_examples, tokenizer=tokenizer, dict_builder=dict_builder,
         label_map=processor.get_labels(), output_file=train_file)
     train_input_fn = file_based_input_fn_builder(
             input_file=train_file,
@@ -87,7 +113,7 @@ def main(_):
             is_training=True,
             drop_remainder=True,
             input_dim=tokenizer.dim,
-            dict_dim=1)
+            dict_dim=dict_builder.dim)
 
     iterator = train_input_fn().make_one_shot_iterator() 
     one_element = iterator.get_next()
