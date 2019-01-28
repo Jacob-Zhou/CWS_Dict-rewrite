@@ -124,7 +124,7 @@ def file_based_input_fn_builder(input_file, batch_size, is_training,
 
         input_dicts = tf.sparse.to_dense(example["input_dicts"])
         input_dicts = tf.reshape(input_dicts, shape=[-1, dict_dim])
-        if FLAGS.dict_augment_rate == 0:
+        if FLAGS.dict_augment_rate == 0 or not is_training:
             example["input_dicts"] = input_dicts
         else:
             flip_mask = tf.random.uniform(tf.shape(input_dicts)) < FLAGS.dict_augment_rate

@@ -135,29 +135,19 @@ class DictHyperModel(object):
             cell = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=1 - config.hidden_dropout_prob)
             return cell
 
-        with tf.variable_scope('character'):
+        with tf.variable_scope('hyper'):
+            self.dict = tf.cast(self.dict, dtype=tf.float32)
+            x = tf.concat([x, self.dict], axis=2)
             (forward_output, backword_output), _ = tf.nn.bidirectional_dynamic_rnn(
-                cell_fw=lstm_cell(config.hidden_size),
-                cell_bw=lstm_cell(config.hidden_size),
+                cell_fw=hyperlstm_cell(config.hidden_size),
+                cell_bw=hyperlstm_cell(config.hidden_size),
                 inputs=x,
                 sequence_length=self.seq_length,
                 dtype=tf.float32
             )
             output = tf.concat([forward_output, backword_output], axis=2)
 
-        with tf.variable_scope('dict'):
-            self.dict = tf.cast(self.dict, dtype=tf.float32)
-            (forward_output, backword_output), _ = tf.nn.bidirectional_dynamic_rnn(
-                cell_fw=lstm_cell(config.dict_hidden_size),
-                cell_bw=lstm_cell(config.dict_hidden_size),
-                inputs=self.dict,
-                sequence_length=self.seq_length,
-                dtype=tf.float32
-            )
-            dict_output = tf.concat([forward_output, backword_output], axis=2)
-
         with tf.variable_scope('output'):
-            output = tf.concat([dict_output, output], axis=2)
             scores = layers.fully_connected(
                 inputs=output,
                 num_outputs=config.num_classes,
@@ -206,7 +196,7 @@ def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
 
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-        model = DictConcatModel(
+        model = DictHyperModel(
             config, is_training, input_ids, label_ids, input_dicts, seq_length, embedding)
 
         tvars = tf.trainable_variables()
