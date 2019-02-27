@@ -102,19 +102,23 @@ class DictHyperModel(SegmentModel):
 
         x = model_utils.dropout(x, config.embedding_dropout_prob)
 
-        def hyperlstm_cell(dim):
-            cell = HyperLSTMCell(num_units=config.hidden_size, forget_bias=1.0, use_recurrent_dropout=False,
-                                 dropout_keep_prob=1.0, use_layer_norm=False, hyper_num_units=config.dict_hidden_size,
-                                 hyper_embedding_size=config.hyper_embedding_size, hyper_use_recurrent_dropout=False)
+        def hyperlstm_cell(dim, input_main_dim, input_hyper_dim):
+            cell = HyperLSTMCell(num_units=dim, 
+                               input_main_dim=input_main_dim, input_hyper_dim=input_hyper_dim, 
+                               forget_bias=1.0, use_recurrent_dropout=False,
+                               dropout_keep_prob=1.0, use_layer_norm=False, hyper_num_units=config.dict_hidden_size,
+                               hyper_embedding_size=config.hyper_embedding_size, hyper_use_recurrent_dropout=False)
             cell = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=1 - config.hidden_dropout_prob)
             return cell
 
         with tf.variable_scope('hyper'):
             self.dict = tf.cast(self.dict, dtype=tf.float32)
             x = tf.concat([x, self.dict], axis=2)
+            input_main_dim = model_utils.get_shape_list(x, expected_rank=3)[2]
+            input_hyper_dim = model_utils.get_shape_list(self.dict, expected_rank=3)[2]
             (forward_output, backword_output), _ = tf.nn.bidirectional_dynamic_rnn(
-                cell_fw=hyperlstm_cell(config.hidden_size),
-                cell_bw=hyperlstm_cell(config.hidden_size),
+                cell_fw=hyperlstm_cell(config.hidden_size, input_main_dim, input_hyper_dim),
+                cell_bw=hyperlstm_cell(config.hidden_size, input_main_dim, input_hyper_dim),
                 inputs=x,
                 sequence_length=self.seq_length,
                 dtype=tf.float32

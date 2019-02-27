@@ -240,7 +240,8 @@ class HyperLSTMCell(tf.contrib.rnn.RNNCell):
     https://arxiv.org/abs/1609.09106
     '''
 
-    def __init__(self, num_units, forget_bias=1.0,
+    def __init__(self, num_units, input_main_dim, input_hyper_dim,
+                 forget_bias=1.0,
                  use_recurrent_dropout=False, dropout_keep_prob=0.90, use_layer_norm=True,
                  hyper_num_units=128, hyper_embedding_size=16,
                  hyper_use_recurrent_dropout=False):
@@ -261,6 +262,8 @@ class HyperLSTMCell(tf.contrib.rnn.RNNCell):
             Recommend turning this on only if hyper_num_units becomes very large (>= 512)
         '''
         self.num_units = num_units
+        self.input_main_dim = input_main_dim
+        self.input_hyper_dim = input_hyper_dim
         self.forget_bias = forget_bias
         self.use_recurrent_dropout = use_recurrent_dropout
         self.dropout_keep_prob = dropout_keep_prob
@@ -287,7 +290,7 @@ class HyperLSTMCell(tf.contrib.rnn.RNNCell):
 
     def __call__(self, input_all, state, timestep=0, scope=None):
         with tf.variable_scope(scope or type(self).__name__):
-            input_main, input_hyper = tf.split(input_all, num_or_size_splits=[100 * 9, 8], axis=1)
+            input_main, input_hyper = tf.split(input_all, num_or_size_splits=[self.input_main_dim, self.input_hyper_dim], axis=1)
             total_c, total_h = state
             c = total_c[:, 0:self.num_units]
             h = total_h[:, 0:self.num_units]
