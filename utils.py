@@ -65,10 +65,16 @@ def get_embedding(embedding_file, vocab, size=100):
                 c += 1
 
     for word in vocab.keys():
-        if len(word) == 2:
-            first_char = word[0] if word[0] in vocab else "U"
-            second_char = word[1] if word[1] in vocab else "U"
-            init_embedding[vocab[word]] = (init_embedding[vocab[first_char]] + init_embedding[vocab[second_char]]) / 2
+        if len(word) > 1:
+            e = 0
+            for char in word:
+                e += init_embedding[vocab[char]] if char in vocab else init_embedding[vocab["U"]]
+            e /= len(word)
+            init_embedding[vocab[word]] = e
+
+            # first_char = word[0] if word[0] in vocab else "U"
+            # second_char = word[1] if word[1] in vocab else "U"
+            # init_embedding[vocab[word]] = (init_embedding[vocab[first_char]] + init_embedding[vocab[second_char]]) / 2
 
     init_embedding[vocab["P"]] = np.zeros(shape=size)
     print('oov character rate %f' % (float(c) / len(vocab)))

@@ -26,10 +26,16 @@ import tensorflow as tf
 import utils
 
 
-def load_vocab(vocab_files):
+def load_vocab(vocab_files, preserve_token=None):
     """Loads a vocabulary file into a dictionary."""
+    if preserve_token is None:
+        preserve_token = []
     vocab = collections.OrderedDict()
     index = 0
+    if preserve_token is not None:
+        for token in preserve_token:
+            vocab[token] = index
+            index += 1
     vocab_files = vocab_files.split(",")
     for vocab_file in vocab_files:
         with tf.gfile.GFile(vocab_file, "r") as reader:
@@ -116,7 +122,7 @@ class WindowTokenizer(Tokenizer):
         :param tokens:
         :return: windowed ids
         """
-        fw = (self.window_size - 1) // 2
+        fw = self.window_size // 2
         bw = fw if fw * 2 + 1 == self.window_size else fw - 1
         unwind_ids = [self.vocab["S"]] * fw + convert_by_vocab(self.vocab, tokens, self.unk_token) + \
                      [self.vocab["E"]] * bw
@@ -140,12 +146,56 @@ class WindowBigramTokenizer(WindowTokenizer):
         self.dim = window_size * 2 - 1
 
     def convert_tokens_to_ids(self, tokens):
-        fw = (self.window_size - 1) // 2
+        fw = self.window_size // 2
         bw = fw if fw * 2 + 1 == self.window_size else fw - 1
         padded_tokens = ["S"] * fw + tokens + ["E"] * bw
         uni_ids = convert_by_vocab(self.vocab, padded_tokens, self.unk_token)
         bi_ids = convert_by_vocab(self.vocab, ["".join(padded_tokens[i: i + 2]) for i in range(len(padded_tokens) - 1)])
         wb_ids = [uni_ids[i: i + self.window_size] + bi_ids[i: i + self.window_size - 1] for i in range(len(tokens))]
+        return wb_ids
+
+    def convert_ids_to_tokens(self, ids):
+        c_inx = self.window_size // 2
+        c_ids = [win[c_inx] for win in ids]
+        return convert_by_vocab(self.inv_vocab, c_ids)
+
+
+class WindowNgramTokenizer(WindowTokenizer):
+    def __init__(self, vocab_file, ngram_file, window_size, do_lower_case=True):
+        if six.PY3:
+            super().__init__(vocab_file, window_size=window_size, do_lower_case=do_lower_case)
+        else:
+            super(WindowNgramTokenizer, self).__init__(vocab_file,
+                                                       window_size=window_size,
+                                                       do_lower_case=do_lower_case)
+        assert window_size <= 15, "window size is too big, must small than 15"
+        self.vocab = load_vocab(",".join([vocab_file, ngram_file]),
+                                preserve_token=["P", "S", "E"] + ["U" + str(n) for n in range(15)])
+        self.dim = (window_size * (window_size + 1)) // 2
+
+    def convert_by_vocab(self, items):
+        """Converts a sequence of [tokens|ids] using the vocab."""
+        output = []
+        for item in items:
+            if item in self.vocab:
+                output.append(self.vocab[item])
+            else:
+                output.append(self.vocab["U" + str(len(item) - 1)])
+        return output
+
+    def convert_tokens_to_ids(self, tokens):
+        fw = self.window_size // 2
+        bw = fw if fw * 2 + 1 == self.window_size else fw - 1
+        padded_tokens = ["S"] * fw + tokens + ["E"] * bw
+        unzipped_ids = [self.convert_by_vocab(
+            ["".join(padded_tokens[i: i + 1 + n]) for i in range(len(padded_tokens) - n)]
+        ) for n in range(self.window_size)]
+        wb_ids = []
+        for i in range(len(tokens)):
+            window_ids = []
+            for n in range(self.window_size):
+                window_ids += unzipped_ids[n][i: i + self.window_size - n]
+            wb_ids.append(window_ids)
         return wb_ids
 
     def convert_ids_to_tokens(self, ids):
@@ -239,14 +289,14 @@ class BasicTokenizer(object):
         # as is Japanese Hiragana and Katakana. Those alphabets are used to write
         # space-separated words, so they are not treated specially and handled
         # like the all of the other languages.
-        if ((cp >= 0x4E00 and cp <= 0x9FFF) or  #
-                (cp >= 0x3400 and cp <= 0x4DBF) or  #
-                (cp >= 0x20000 and cp <= 0x2A6DF) or  #
-                (cp >= 0x2A700 and cp <= 0x2B73F) or  #
-                (cp >= 0x2B740 and cp <= 0x2B81F) or  #
-                (cp >= 0x2B820 and cp <= 0x2CEAF) or
-                (cp >= 0xF900 and cp <= 0xFAFF) or  #
-                (cp >= 0x2F800 and cp <= 0x2FA1F)):  #
+        if ((0x4E00 <= cp <= 0x9FFF) or  #
+                (0x3400 <= cp <= 0x4DBF) or  #
+                (0x20000 <= cp <= 0x2A6DF) or  #
+                (0x2A700 <= cp <= 0x2B73F) or  #
+                (0x2B740 <= cp <= 0x2B81F) or  #
+                (0x2B820 <= cp <= 0x2CEAF) or
+                (0xF900 <= cp <= 0xFAFF) or  #
+                (0x2F800 <= cp <= 0x2FA1F)):  #
             return True
 
         return False
@@ -296,8 +346,8 @@ def _is_punctuation(char):
     # Characters such as "^", "$", and "`" are not in the Unicode
     # Punctuation class but we treat them as punctuation anyways, for
     # consistency.
-    if ((cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or
-            (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126)):
+    if ((33 <= cp <= 47) or (58 <= cp <= 64) or
+            (91 <= cp <= 96) or (123 <= cp <= 126)):
         return True
     cat = unicodedata.category(char)
     if cat.startswith("P"):

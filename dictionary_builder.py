@@ -9,24 +9,25 @@ import utils
 def load_dict(dictionary_files):
     """Loads a vocabulary file into a dictionary."""
     dictionary = collections.OrderedDict()
-    index = 0
     dictionary_files = dictionary_files.split(",")
     for dictionary_file in dictionary_files:
-        with tf.gfile.GFile(dictionary_file, "r") as reader:
-            while True:
-                token = utils.convert_to_unicode(reader.readline())
-                if not token:
-                    break
-                token = token.strip()
-                dictionary[token] = index
-                index += 1
+        if not str.isspace(dictionary_file):
+            with tf.gfile.GFile(dictionary_file, "r") as reader:
+                while True:
+                    token = utils.convert_to_unicode(reader.readline())
+                    if not token:
+                        break
+                    token = token.strip().split(" ")
+                    if len(token) == 2:
+                        dictionary[token[0]] = token[1]
+                    else:
+                        dictionary[token[0]] = 1
     return dictionary
 
 
 class BasicDictionaryBuilder:
     def __init__(self, dictionary_file):
         self.dictionary = load_dict(dictionary_file)
-        self.inv_dictionary = {v: k for k, v in self.dictionary.items()}
 
     def extract(self, tokens):
         raise NotImplementedError()
@@ -55,7 +56,7 @@ class DefaultDictionaryBuilder(BasicDictionaryBuilder):
                     continue
                 word = ''.join(tokens[i - l:i + 1])
                 if word in self.dictionary:
-                    word_tag.append(1)
+                    word_tag.append(self.dictionary[word])
                 else:
                     word_tag.append(0)
             # bw
@@ -65,8 +66,9 @@ class DefaultDictionaryBuilder(BasicDictionaryBuilder):
                     continue
                 word = ''.join(tokens[i:i + l + 1])
                 if word in self.dictionary:
-                    word_tag.append(1)
+                    word_tag.append(self.dictionary[word])
                 else:
                     word_tag.append(0)
             result.append(word_tag)
         return result
+

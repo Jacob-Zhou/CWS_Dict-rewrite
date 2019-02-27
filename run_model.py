@@ -5,6 +5,7 @@ import models
 from models import model_fn_builder
 from models import ModelConfig
 import tokenization
+import augmenter
 import dictionary_builder
 import tensorflow as tf
 import process
@@ -39,8 +40,11 @@ flags.DEFINE_string(
 flags.DEFINE_string("bigram_file", None,
                     "The bigram file that the BERT model was trained on.")
 
+flags.DEFINE_string("ngram_file", None,
+                    "The ngram file that the BERT model was trained on.")
+
 flags.DEFINE_string("dict_file", None,
-                    "The bigram file that the BERT model was trained on.")
+                    "The dict file that the BERT model was trained on.")
 
 flags.DEFINE_integer("min_word_len", 2,
                      "The min word length.")
@@ -76,7 +80,6 @@ flags.DEFINE_float(
     "dict_augment_rate", 0,
     "the probability of filp dict input")
 
-
 flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
 
 flags.DEFINE_float("num_train_epochs", 3.0,
@@ -102,7 +105,7 @@ flags.DEFINE_string("processor", "CWSProcessor", "BiLabelProcessor or CWSProcess
 
 
 def file_based_input_fn_builder(input_file, batch_size, is_training,
-                                drop_remainder, input_dim=5, dict_dim=1, shuffle_buffer=1000):
+                                drop_remainder, input_dim=5, dict_dim=1, shuffle_buffer=1000, augmenter=None):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
 
     name_to_features = {
@@ -116,21 +119,15 @@ def file_based_input_fn_builder(input_file, batch_size, is_training,
         """Decodes a record to a TensorFlow example."""
         example = tf.parse_single_example(record, name_to_features)
 
-        example["input_ids"] = tf.sparse.to_dense(example["input_ids"])
-        example["input_ids"] = tf.reshape(example["input_ids"], shape=[-1, input_dim])
+        input_ids = tf.sparse.to_dense(example["input_ids"])
+        input_ids = tf.reshape(input_ids, shape=[-1, input_dim])
 
         input_dicts = tf.sparse.to_dense(example["input_dicts"])
         input_dicts = tf.reshape(input_dicts, shape=[-1, dict_dim])
-        if FLAGS.dict_augment_rate == 0 or not is_training:
-            example["input_dicts"] = input_dicts
+        if augmenter is None or not is_training:
+            example["input_ids"], example["input_dicts"] = input_ids, input_dicts
         else:
-            flip_mask = tf.random.uniform(tf.shape(input_dicts)) < FLAGS.dict_augment_rate
-            # flip if flip mask is true
-            input_dicts = tf.cast(input_dicts, dtype=tf.bool)
-            input_dicts = tf.logical_xor(input_dicts, flip_mask)
-            input_dicts = tf.cast(input_dicts, dtype=tf.int64)
-            example["input_dicts"] = input_dicts
-
+            example["input_ids"], example["input_dicts"] = augmenter.augment(input_ids, input_dicts)
         example["label_ids"] = tf.sparse.to_dense(example["label_ids"])
         example["label_ids"] = tf.reshape(example["label_ids"], shape=[-1])
         example["seq_length"] = example["seq_length"]
@@ -173,7 +170,6 @@ def main(_):
         raise ValueError(
             "At least one of `train`, `eval` or `predict' must be select.")
 
-
     tf.gfile.MakeDirs(FLAGS.output_dir)
 
     if FLAGS.bigram_file is not None:
@@ -184,13 +180,13 @@ def main(_):
         tokenizer = tokenization.WindowTokenizer(
             vocab_file=FLAGS.vocab_file,
             do_lower_case=FLAGS.do_lower_case, window_size=FLAGS.window_size)
-    # fix me window_size
 
     dict_builder = None
     if FLAGS.dict_file is not None:
         dict_builder = dictionary_builder.DefaultDictionaryBuilder(FLAGS.dict_file,
                                                                    min_word_len=FLAGS.min_word_len,
                                                                    max_word_len=FLAGS.max_word_len)
+    augm = augmenter.DefaultAugmenter(FLAGS.dict_augment_rate)
 
     run_config = tf.estimator.RunConfig(
         model_dir=FLAGS.output_dir,
@@ -220,6 +216,16 @@ def main(_):
         cls = models.AttendedDictModel
     elif FLAGS.model == "attend_input":
         cls = models.AttendedInputModel
+    elif FLAGS.model == "dual_dict":
+        cls = models.DictConcatModel
+        assert FLAGS.bigram_file is not None, "dual_dict must need bigram file"
+        tokenizer = tokenization.WindowNgramTokenizer(
+            vocab_file=FLAGS.vocab_file, ngram_file=FLAGS.bigram_file,
+            do_lower_case=FLAGS.do_lower_case, window_size=FLAGS.window_size)
+        dict_builder = dictionary_builder.DefaultDictionaryBuilder(FLAGS.bigram_file,
+                                                                   min_word_len=FLAGS.min_word_len,
+                                                                   max_word_len=FLAGS.max_word_len)
+        augm = augmenter.DualAugmenter(FLAGS.window_size)
 
     config = ModelConfig.from_json_file(FLAGS.config_file)
     model_fn = model_fn_builder(
@@ -231,7 +237,6 @@ def main(_):
         num_train_steps=num_train_steps,
         num_warmup_steps=num_warmup_steps,
         init_embedding=FLAGS.init_embedding)
-
 
     # If TPU is not available, this will fall back to normal Estimator on CPU
     # or GPU.
@@ -255,7 +260,9 @@ def main(_):
             drop_remainder=True,
             input_dim=tokenizer.dim,
             dict_dim=dict_builder.dim if dict_builder is not None else 1,
-            shuffle_buffer=len(train_examples))
+            shuffle_buffer=len(train_examples),
+            augmenter=augm
+        )
 
         eval_input_fn = None
         if FLAGS.do_eval:
