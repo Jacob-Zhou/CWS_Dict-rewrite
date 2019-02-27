@@ -2,6 +2,7 @@
 import copy
 import numpy as np
 import tensorflow as tf
+from .ModelConfig import ModelConfig
 from tensorflow.contrib import rnn
 from tensorflow.contrib import layers
 from tensorflow.contrib import crf
@@ -14,20 +15,12 @@ import optimization
 __all__ = ["BiLSTMConfig", "BiLSTMModel", "model_fn_builder"]
 
 
-class BiLSTMConfig(object):
+class BiLSTMConfig(ModelConfig):
     """Configuration for `BaselineModel`."""
 
-    def __init__(self,
-                 vocab_size,
-                 embedding_size=100,
-                 hidden_size=128,
-                 num_hidden_layers=1,
-                 bi_direction=True,
-                 rnn_cell="lstm",
-                 l2_reg_lamda=0.0001,
-                 embedding_dropout_prob=0.2,
-                 hidden_dropout_prob=0.2,
-                 num_classes=4, ):
+    def __init__(self, vocab_size=8004, embedding_size=100, hidden_size=128, num_hidden_layers=1, bi_direction=True,
+                 rnn_cell="lstm", l2_reg_lamda=0.0001, embedding_dropout_prob=0.2, hidden_dropout_prob=0.2,
+                 num_classes=4, **kw):
         """Constructs BertConfig.
 
         Args:
@@ -50,6 +43,7 @@ class BiLSTMConfig(object):
           init_embedding: The stdev of the truncated_normal_initializer for
             initializing all weight matrices.
         """
+        super(BiLSTMModel).__init__(**kw)
         self.l2_reg_lamda = l2_reg_lamda
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -60,30 +54,6 @@ class BiLSTMConfig(object):
         self.embedding_dropout_prob = embedding_dropout_prob
         self.embedding_size = embedding_size
         self.num_classes = num_classes
-
-    @classmethod
-    def from_dict(cls, json_object):
-        """Constructs a `BaselineConfig` from a Python dictionary of parameters."""
-        config = BiLSTMConfig(vocab_size=None)
-        for (key, value) in six.iteritems(json_object):
-            config.__dict__[key] = value
-        return config
-
-    @classmethod
-    def from_json_file(cls, json_file):
-        """Constructs a `BertConfig` from a json file of parameters."""
-        with tf.gfile.GFile(json_file, "r") as reader:
-            text = reader.read()
-        return cls.from_dict(json.loads(text))
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
-
-    def to_json_string(self):
-        """Serializes this instance to a JSON string."""
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
 
 class BiLSTMModel(object):

@@ -1,12 +1,9 @@
 import json
 import utils
 import os
-from models import BaselineModel
-from models import DictConcatModel
-from models import AttendedDictModel
-from models import AttendedInputModel
-from models import BiLSTMModel
-from models import DictHyperModel
+import models
+from models import model_fn_builder
+from models import ModelConfig
 import tokenization
 import dictionary_builder
 import tensorflow as tf
@@ -212,67 +209,28 @@ def main(_):
         num_early_steps = int(single_epoch_steps * 5)
         num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
 
-    model_fn = None
+    cls = None
     if FLAGS.model == "baseline":
-        config = BaselineModel.BaselineConfig.from_json_file(FLAGS.config_file)
-        model_fn = BaselineModel.model_fn_builder(
-            config=config,
-            init_checkpoint=FLAGS.init_checkpoint,
-            learning_rate=FLAGS.learning_rate,
-            tokenizer=tokenizer,
-            num_train_steps=num_train_steps,
-            num_warmup_steps=num_warmup_steps,
-            init_embedding=FLAGS.init_embedding)
+        cls = models.BaselineModel
     elif FLAGS.model == "dict_concat":
-        config = DictConcatModel.DictConcatConfig.from_json_file(FLAGS.config_file)
-        model_fn = DictConcatModel.model_fn_builder(
-            config=config,
-            init_checkpoint=FLAGS.init_checkpoint,
-            learning_rate=FLAGS.learning_rate,
-            tokenizer=tokenizer,
-            num_train_steps=num_train_steps,
-            num_warmup_steps=num_warmup_steps,
-            init_embedding=FLAGS.init_embedding)
+        cls = models.DictConcatModel
     elif FLAGS.model == "dict_hyper":
-        config = DictHyperModel.DictHyperConfig.from_json_file(FLAGS.config_file)
-        model_fn = DictHyperModel.model_fn_builder(
-            config=config,
-            init_checkpoint=FLAGS.init_checkpoint,
-            learning_rate=FLAGS.learning_rate,
-            tokenizer=tokenizer,
-            num_train_steps=num_train_steps,
-            num_warmup_steps=num_warmup_steps,
-            init_embedding=FLAGS.init_embedding)
+        cls = models.DictHyperModel
     elif FLAGS.model == "attend_dict":
-        config = AttendedDictModel.AttendDictConfig.from_json_file(FLAGS.config_file)
-        model_fn = AttendedDictModel.model_fn_builder(
-            config=config,
-            init_checkpoint=FLAGS.init_checkpoint,
-            learning_rate=FLAGS.learning_rate,
-            tokenizer=tokenizer,
-            num_train_steps=num_train_steps,
-            num_warmup_steps=num_warmup_steps,
-            init_embedding=FLAGS.init_embedding)
+        cls = models.AttendedDictModel
     elif FLAGS.model == "attend_input":
-        config = AttendedInputModel.AttendInputConfig.from_json_file(FLAGS.config_file)
-        model_fn = AttendedInputModel.model_fn_builder(
-            config=config,
-            init_checkpoint=FLAGS.init_checkpoint,
-            learning_rate=FLAGS.learning_rate,
-            tokenizer=tokenizer,
-            num_train_steps=num_train_steps,
-            num_warmup_steps=num_warmup_steps,
-            init_embedding=FLAGS.init_embedding)
-    elif FLAGS.model == "bilstm":
-        config = BiLSTMModel.BiLSTMConfig.from_json_file(FLAGS.config_file)
-        model_fn = BiLSTMModel.model_fn_builder(
-            config=config,
-            init_checkpoint=FLAGS.init_checkpoint,
-            learning_rate=FLAGS.learning_rate,
-            tokenizer=tokenizer,
-            num_train_steps=num_train_steps,
-            num_warmup_steps=num_warmup_steps,
-            init_embedding=FLAGS.init_embedding)
+        cls = models.AttendedInputModel
+
+    config = ModelConfig.from_json_file(FLAGS.config_file)
+    model_fn = model_fn_builder(
+        cls,
+        config=config,
+        init_checkpoint=FLAGS.init_checkpoint,
+        learning_rate=FLAGS.learning_rate,
+        tokenizer=tokenizer,
+        num_train_steps=num_train_steps,
+        num_warmup_steps=num_warmup_steps,
+        init_embedding=FLAGS.init_embedding)
 
 
     # If TPU is not available, this will fall back to normal Estimator on CPU

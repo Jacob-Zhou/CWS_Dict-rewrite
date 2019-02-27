@@ -2,6 +2,8 @@
 import copy
 import numpy as np
 import tensorflow as tf
+from .ModelConfig import ModelConfig
+from .SegmentModel import SegmentModel
 from tensorflow.contrib import rnn
 from tensorflow.contrib import layers
 from tensorflow.contrib import crf
@@ -11,23 +13,13 @@ import model_utils
 import utils
 import optimization
 
-__all__ = ["BaselineConfig", "BaselineModel", "model_fn_builder"]
 
-
-class BaselineConfig(object):
+class BaselineConfig(ModelConfig):
     """Configuration for `BaselineModel`."""
 
-    def __init__(self,
-                 vocab_size,
-                 embedding_size=100,
-                 hidden_size=128,
-                 num_hidden_layers=1,
-                 bi_direction=True,
-                 rnn_cell="lstm",
-                 l2_reg_lamda=0.0001,
-                 embedding_dropout_prob=0.2,
-                 hidden_dropout_prob=0.2,
-                 num_classes=4, ):
+    def __init__(self, vocab_size=8004, embedding_size=100, hidden_size=128, num_hidden_layers=1, bi_direction=True,
+                 rnn_cell="lstm", l2_reg_lamda=0.0001, embedding_dropout_prob=0.2, hidden_dropout_prob=0.2,
+                 num_classes=4, **kw):
         """Constructs BertConfig.
 
         Args:
@@ -50,6 +42,7 @@ class BaselineConfig(object):
           init_embedding: The stdev of the truncated_normal_initializer for
             initializing all weight matrices.
         """
+        super(BaselineConfig).__init__(**kw)
         self.l2_reg_lamda = l2_reg_lamda
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -61,37 +54,13 @@ class BaselineConfig(object):
         self.embedding_size = embedding_size
         self.num_classes = num_classes
 
-    @classmethod
-    def from_dict(cls, json_object):
-        """Constructs a `BaselineConfig` from a Python dictionary of parameters."""
-        config = BaselineConfig(vocab_size=None)
-        for (key, value) in six.iteritems(json_object):
-            config.__dict__[key] = value
-        return config
 
-    @classmethod
-    def from_json_file(cls, json_file):
-        """Constructs a `BertConfig` from a json file of parameters."""
-        with tf.gfile.GFile(json_file, "r") as reader:
-            text = reader.read()
-        return cls.from_dict(json.loads(text))
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
-
-    def to_json_string(self):
-        """Serializes this instance to a JSON string."""
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
-
-
-class BaselineModel(object):
+class BaselineModel(SegmentModel):
     '''
     Baseline models
     BiLSTM+CRF and Stacked BiLSTM+CRF
     '''
-    def __init__(self, config: BaselineConfig, is_training, input_ids, label_ids, seq_length, init_embedding=None):
+    def __init__(self, config: BaselineConfig, is_training, features, init_embedding=None):
         """Constructor for BertModel.
 
         Args:
@@ -107,6 +76,12 @@ class BaselineModel(object):
           ValueError: The config is invalid or one of the input tensor shapes
             is invalid.
         """
+
+        super(BaselineModel).__init__()
+        input_ids = features["input_ids"]
+        seq_length = features["seq_length"]
+        label_ids = features["label_ids"]
+
         self.input_ids = input_ids
         self.label_ids = label_ids
         self.seq_length = seq_length
@@ -166,114 +141,4 @@ class BaselineModel(object):
                 scores, self.label_ids, self.seq_length, transition_param)
 
             self.loss = tf.reduce_mean(-self.log_likelihood)
-
-    def get_all_results(self):
-        return self.loss, -self.log_likelihood, self.label_ids, self.prediction, self.seq_length
-
-    def get_loss(self):
-        assert self.is_training, "loss can only get while training"
-        return self.loss
-
-    def get_NLLLoss(self):
-        assert self.is_training
-        return -self.log_likelihood, "NLLLoss can only get while training"
-
-
-def model_fn_builder(config, init_checkpoint, tokenizer, learning_rate,
-                     num_train_steps, num_warmup_steps, init_embedding=None):
-    """Returns `model_fn` closure for TPUEstimator."""
-
-    embedding = None
-    if init_embedding is not None:
-        embedding = utils.get_embedding(init_embedding, tokenizer.vocab, config.embedding_size)
-
-    def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
-        """The `model_fn` for TPUEstimator."""
-
-        tf.logging.info("*** Features ***")
-        for name in sorted(features.keys()):
-            tf.logging.info("  name = %s, shape = %s" % (name, features[name].shape))
-
-        input_ids = features["input_ids"]
-        seq_length = features["seq_length"]
-        label_ids = features["label_ids"]
-
-        is_training = (mode == tf.estimator.ModeKeys.TRAIN)
-
-        model = BaselineModel(
-            config, is_training, input_ids, label_ids, seq_length, embedding)
-
-        tvars = tf.trainable_variables()
-        initialized_variable_names = {}
-        if init_checkpoint:
-            (assignment_map,
-             initialized_variable_names) = model_utils.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
-            tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
-
-        tf.logging.info("**** Trainable Variables ****")
-        for var in tvars:
-            utils.variable_summaries(var)
-            init_string = ""
-            if var.name in initialized_variable_names:
-                init_string = ", *INIT_FROM_CKPT*"
-            tf.logging.info("  name = %s, shape = %s%s", var.name, var.shape,
-                            init_string)
-
-        if mode == tf.estimator.ModeKeys.TRAIN:
-            (total_loss, per_example_loss, label_ids, prediction, seq_length) = model.get_all_results()
-
-            weight = tf.sequence_mask(seq_length, dtype=tf.int64)
-            accuracy = tf.metrics.accuracy(label_ids, prediction, weights=weight)
-
-            tf.summary.scalar('accuracy', accuracy[1])
-
-            # train_op = optimization.create_optimizer(
-            #     total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu=False)
-
-            l2_reg_lamda = config.l2_reg_lamda
-            clip = 5
-
-            with tf.variable_scope('train_op'):
-                optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-                l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in tvars if v.get_shape().ndims > 1])
-                total_loss = total_loss + l2_reg_lamda * l2_loss
-                grads, _ = tf.clip_by_global_norm(tf.gradients(total_loss, tvars), clip)
-                global_step = tf.train.get_or_create_global_step()
-                train_op = optimizer.apply_gradients(zip(grads, tvars), global_step=global_step)
-
-            logging_hook = tf.train.LoggingTensorHook({"accuracy": accuracy[1]}, every_n_iter=100)
-
-            output_spec = tf.estimator.EstimatorSpec(
-                mode=mode,
-                loss=total_loss,
-                train_op=train_op,
-                training_hooks=[logging_hook])
-        elif mode == tf.estimator.ModeKeys.EVAL:
-            (total_loss, per_example_loss, label_ids, prediction, seq_length) = model.get_all_results()
-            loss = tf.metrics.mean(per_example_loss)
-
-            weight = tf.sequence_mask(seq_length, dtype=tf.int64)
-            accuracy = tf.metrics.accuracy(label_ids, prediction, weights=weight)
-            metrics = {
-                "eval_loss": loss,
-                "eval_accuracy": accuracy
-            }
-
-            output_spec = tf.estimator.EstimatorSpec(
-                mode=mode,
-                loss=total_loss,
-                eval_metric_ops=metrics)
-        else:
-            (_, _, _, prediction, seq_length) = model.get_all_results()
-            predictions = {"input_ids": input_ids,
-                           "prediction": prediction,
-                           "ground_truths": label_ids,
-                           "length": seq_length}
-            output_spec = tf.estimator.EstimatorSpec(
-                mode=mode,
-                predictions=predictions)
-        return output_spec
-
-    return model_fn
-
 
