@@ -113,9 +113,9 @@ class DictHyperModel(SegmentModel):
 
         with tf.variable_scope('hyper'):
             self.dict = tf.cast(self.dict, dtype=tf.float32)
-            x = tf.concat([x, self.dict], axis=2)
             input_main_dim = model_utils.get_shape_list(x, expected_rank=3)[2]
             input_hyper_dim = model_utils.get_shape_list(self.dict, expected_rank=3)[2]
+            x = tf.concat([x, self.dict], axis=2)
             (forward_output, backword_output), _ = tf.nn.bidirectional_dynamic_rnn(
                 cell_fw=hyperlstm_cell(config.hidden_size, input_main_dim, input_hyper_dim),
                 cell_bw=hyperlstm_cell(config.hidden_size, input_main_dim, input_hyper_dim),

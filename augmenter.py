@@ -24,7 +24,7 @@ class DefaultAugmenter(BasicAugmenter):
 
 
 class DualAugmenter(BasicAugmenter):
-    def __init__(self, windows, input_augment_rate=0.25, dict_augment_rate=0.10, **kwargs):
+    def __init__(self, windows, input_augment_rate=0.25, dict_augment_rate=0.80, **kwargs):
         self.windows = windows
         self.input_augment_rate = input_augment_rate
         self.dict_augment_rate = dict_augment_rate

@@ -222,9 +222,10 @@ def main(_):
         tokenizer = tokenization.WindowNgramTokenizer(
             vocab_file=FLAGS.vocab_file, ngram_file=FLAGS.bigram_file,
             do_lower_case=FLAGS.do_lower_case, window_size=FLAGS.window_size)
-        dict_builder = dictionary_builder.DefaultDictionaryBuilder(FLAGS.bigram_file,
-                                                                   min_word_len=FLAGS.min_word_len,
-                                                                   max_word_len=FLAGS.max_word_len)
+        if FLAGS.do_train:
+            dict_builder = dictionary_builder.DefaultDictionaryBuilder(FLAGS.bigram_file,
+                                                                       min_word_len=FLAGS.min_word_len,
+                                                                       max_word_len=FLAGS.max_word_len)
         augm = augmenter.DualAugmenter(FLAGS.window_size)
 
     config = ModelConfig.from_json_file(FLAGS.config_file)
