@@ -24,7 +24,8 @@ class DefaultAugmenter(BasicAugmenter):
 
 
 class DualAugmenter(BasicAugmenter):
-    def __init__(self, windows, input_augment_rate=0.25, dict_augment_rate=0.80, **kwargs):
+    def __init__(self, windows, input_augment_rate=0.25, dict_augment_rate=0.25, **kwargs):
+        # dict_augment_rate 0.80 0.50
         self.windows = windows
         self.input_augment_rate = input_augment_rate
         self.dict_augment_rate = dict_augment_rate
@@ -36,9 +37,9 @@ class DualAugmenter(BasicAugmenter):
         slen = shape[0]
         if self.input_augment_rate > 0:
             # TODO need to fix
-            drop_mask_0 = tf.random.uniform((slen, 5)) < 0.01
-            drop_mask_1 = tf.random.uniform((slen, 7)) < 0.25
-            drop_mask_2 = tf.random.uniform((slen, 3)) < 0.10
+            drop_mask_0 = tf.random.uniform((slen, 5)) < 0.05
+            drop_mask_1 = tf.random.uniform((slen, 7)) < 0.25 # 0.50 # 0.25
+            drop_mask_2 = tf.random.uniform((slen, 3)) < 0.10 # 0.50 # 0.10
             unk_token = tf.ones_like(input_ids) * tf.constant([3, 3, 3, 3, 3,
                                                                4, 4, 4, 4,
                                                                5, 5, 5,

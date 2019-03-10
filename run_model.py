@@ -92,6 +92,10 @@ flags.DEFINE_integer("eval_batch_size", 8, "Total batch size for eval.")
 flags.DEFINE_integer("predict_batch_size", 8, "Total batch size for predict.")
 
 flags.DEFINE_float(
+    "gpu_memory", 0.95,
+    "how many memory can model use")
+
+flags.DEFINE_float(
     "warmup_proportion", 0.1,
     "Proportion of training to perform linear learning rate warmup for. "
     "E.g., 0.1 = 10% of training.")
@@ -188,9 +192,12 @@ def main(_):
                                                                    max_word_len=FLAGS.max_word_len)
     augm = augmenter.DefaultAugmenter(FLAGS.dict_augment_rate)
 
+    session_config = tf.ConfigProto()
+    session_config.gpu_options.per_process_gpu_memory_fraction = FLAGS.gpu_memory
+
     run_config = tf.estimator.RunConfig(
         model_dir=FLAGS.output_dir,
-        save_checkpoints_steps=FLAGS.save_checkpoints_steps)
+        save_checkpoints_steps=FLAGS.save_checkpoints_steps).replace(session_config=session_config)
 
     processor = getattr(process, FLAGS.processor)()
 
@@ -222,10 +229,10 @@ def main(_):
         tokenizer = tokenization.WindowNgramTokenizer(
             vocab_file=FLAGS.vocab_file, ngram_file=FLAGS.bigram_file,
             do_lower_case=FLAGS.do_lower_case, window_size=FLAGS.window_size)
-        if FLAGS.do_train:
+        if dict_builder is None:
             dict_builder = dictionary_builder.DefaultDictionaryBuilder(FLAGS.bigram_file,
-                                                                       min_word_len=FLAGS.min_word_len,
-                                                                       max_word_len=FLAGS.max_word_len)
+                                                                   min_word_len=FLAGS.min_word_len,
+                                                                   max_word_len=FLAGS.max_word_len)
         augm = augmenter.DualAugmenter(FLAGS.window_size)
 
     config = ModelConfig.from_json_file(FLAGS.config_file)
